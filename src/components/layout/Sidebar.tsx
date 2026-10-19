@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  LayoutDashboard, Users, GraduationCap, BookOpen, CalendarCheck,
-  Award, BarChart3, Megaphone, Settings, LogOut, ChevronLeft,
-  ChevronRight, Menu, X
-} from 'lucide-react';
+// import {
+//   LayoutDashboard, Users, GraduationCap, BookOpen, CalendarCheck,
+//   Award, BarChart3, Megaphone, Settings, LogOut, ChevronLeft,
+//   ChevronRight, Menu, X
+// } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/types';
+
+import {
+  LayoutDashboard, Users, GraduationCap, BookOpen, CalendarCheck,
+  Award, BarChart3, Megaphone, Settings, LogOut, ChevronLeft,
+  ChevronRight, Menu, X, MessageSquare
+} from 'lucide-react';
 
 interface NavItem {
   label: string;
@@ -16,7 +22,6 @@ interface NavItem {
   icon: React.ReactNode;
   roles: UserRole[];
 }
-
 const navItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} />, roles: ['admin', 'teacher', 'student'] },
   { label: 'Students', path: '/students', icon: <Users size={20} />, roles: ['admin', 'teacher'] },
@@ -26,6 +31,7 @@ const navItems: NavItem[] = [
   { label: 'Grades', path: '/grades', icon: <Award size={20} />, roles: ['admin', 'teacher', 'student'] },
   { label: 'Reports', path: '/reports', icon: <BarChart3 size={20} />, roles: ['admin'] },
   { label: 'Announcements', path: '/announcements', icon: <Megaphone size={20} />, roles: ['admin', 'teacher', 'student'] },
+  { label: 'Complaints', path: '/complaints', icon: <MessageSquare size={20} />, roles: ['admin', 'teacher', 'student'] },
   { label: 'Settings', path: '/settings', icon: <Settings size={20} />, roles: ['admin'] },
 ];
 
