@@ -16,6 +16,7 @@ import { GradesPage } from '@/pages/grades/GradesPage';
 import { ReportsPage } from '@/pages/reports/ReportsPage';
 import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
+import ComplaintsPage from '@/pages/complaints/ComplaintsPage';
 
 export const router = createBrowserRouter([
   {
@@ -97,6 +98,10 @@ export const router = createBrowserRouter([
       {
         path: 'announcements',
         element: <AnnouncementsPage />,
+      },
+      {
+        path: 'complaints',
+        element: <ComplaintsPage />,
       },
       {
         path: 'settings',

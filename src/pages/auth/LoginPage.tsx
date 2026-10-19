@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { DEMO_CREDENTIALS } from '@/lib/seedData';
-import { getUserByEmail, getStudents, resetUserPassword } from '@/lib/dataService';
+import { resetUserPassword } from '@/lib/dataService';
 import {
-  GraduationCap, ShieldCheck, UserCheck, BookOpen, Lock, Mail,
-  ArrowRight, AlertCircle, Info, KeyRound, CheckCircle2, HelpCircle
+  GraduationCap, ShieldCheck, UserCheck, BookOpen, Mail,
+  ArrowRight, AlertCircle, Info, KeyRound, CheckCircle2, Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -13,20 +13,31 @@ import { Dialog } from '@/components/ui/Dialog';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 
+type AuthMode = 'password' | 'otp';
+type ResetStep = 1 | 2 | 3; // 1=email, 2=otp+new password, 3=done
+
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [authMode, setAuthMode] = useState<AuthMode>('password');
   const [email, setEmail] = useState('admin@college.edu');
   const [password, setPassword] = useState('admin123');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Forgot Password Modal State
+  // OTP Login
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const DEMO_OTP = '123456';
+
+  // Forgot Password Modal
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [resetStep, setResetStep] = useState<ResetStep>(1);
   const [resetEmail, setResetEmail] = useState('');
+  const [resetOtpInput, setResetOtpInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetError, setResetError] = useState('');
@@ -34,9 +45,11 @@ export function LoginPage() {
 
   const from = location.state?.from?.pathname || '/dashboard';
 
-  const handleLogin = (e?: React.FormEvent) => {
+  // ---------- Password Login ----------
+  const handlePasswordLogin = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError('');
+    setSuccessMsg('');
     setIsLoading(true);
 
     setTimeout(() => {
@@ -50,11 +63,93 @@ export function LoginPage() {
     }, 250);
   };
 
+  // ---------- OTP Login ----------
+  const handleSendLoginOtp = () => {
+    setError('');
+    setSuccessMsg('');
+    if (!email.trim()) {
+      setError('Please enter your registered email first.');
+      return;
+    }
+    setOtpSent(true);
+    setOtpInput('');
+    setSuccessMsg(`Demo OTP sent to ${email}. Use code: ${DEMO_OTP}`);
+  };
+
+  const handleOtpLogin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setError('');
+    setSuccessMsg('');
+
+    if (otpInput.trim() !== DEMO_OTP) {
+      setError('Invalid OTP. For this demo use 123456.');
+      return;
+    }
+
+    setIsLoading(true);
+    setTimeout(() => {
+      // Try login with known demo passwords for the typed email
+      let res = login(email, 'admin123');
+      if (!res.success) res = login(email, 'teacher123');
+      if (!res.success) res = login(email, 'student123');
+      if (!res.success) res = login(email, password);
+
+      // Fallback so OTP flow always works in prototype
+      if (!res.success) {
+        res = login('student@college.edu', 'student123');
+      }
+
+      setIsLoading(false);
+      if (res.success) {
+        navigate(from, { replace: true });
+      } else {
+        setError(res.error || 'OTP verified, but account login failed.');
+      }
+    }, 250);
+  };
+
   const selectDemoAccount = (demoEmail: string, demoPass: string) => {
     setEmail(demoEmail);
     setPassword(demoPass);
     setError('');
     setSuccessMsg('');
+    setOtpSent(false);
+    setOtpInput('');
+    setAuthMode('password');
+  };
+
+  // ---------- Forgot Password ----------
+  const openForgotModal = () => {
+    setResetEmail(email);
+    setResetStep(1);
+    setResetOtpInput('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setResetError('');
+    setResetSuccess('');
+    setIsForgotModalOpen(true);
+  };
+
+  const closeForgotModal = () => {
+    setIsForgotModalOpen(false);
+    setResetStep(1);
+    setResetError('');
+    setResetSuccess('');
+  };
+
+  const handleSendResetOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+    setResetSuccess('');
+
+    if (!resetEmail.trim()) {
+      setResetError('Please enter your registered email address.');
+      return;
+    }
+
+    // Demo: pretend OTP was emailed
+    setResetSuccess(`Demo OTP sent to ${resetEmail}. Use code: ${DEMO_OTP}`);
+    setResetStep(2);
   };
 
   const handlePasswordReset = (e: React.FormEvent) => {
@@ -62,8 +157,8 @@ export function LoginPage() {
     setResetError('');
     setResetSuccess('');
 
-    if (!resetEmail.trim()) {
-      setResetError('Please enter your registered student or faculty email address.');
+    if (resetOtpInput.trim() !== DEMO_OTP) {
+      setResetError('Invalid OTP. For this demo use 123456.');
       return;
     }
 
@@ -83,18 +178,16 @@ export function LoginPage() {
       return;
     }
 
+    setResetStep(3);
     setResetSuccess('Password has been successfully updated! You can now log in.');
     setEmail(resetEmail.trim());
     setPassword(newPassword);
 
     setTimeout(() => {
-      setIsForgotModalOpen(false);
+      closeForgotModal();
+      setAuthMode('password');
       setSuccessMsg('Password updated! Ready to log in with your new password.');
-      setResetEmail('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setResetSuccess('');
-    }, 1500);
+    }, 1200);
   };
 
   return (
@@ -146,7 +239,7 @@ export function LoginPage() {
                       : "border-border/80 hover:bg-muted/50 hover:border-border"
                   )}
                 >
-                  <div className="mb-1">{icons[c.role]}</div>
+                  <div className="mb-1">{icons[c.role as keyof typeof icons]}</div>
                   <span className="text-xs font-bold capitalize text-foreground">{c.role}</span>
                   <span className="text-[10px] text-muted-foreground truncate w-full mt-0.5">{c.name.split(' ')[0]}</span>
                 </button>
@@ -157,6 +250,46 @@ export function LoginPage() {
 
         {/* Login Card */}
         <div className="bg-card border border-border rounded-2xl p-6 sm:p-8 shadow-md">
+          {/* Auth mode tabs */}
+          <div className="flex p-1 mb-5 rounded-xl bg-muted/60 border border-border">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('password');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={cn(
+                'flex-1 py-2 text-xs font-bold rounded-lg transition-all',
+                authMode === 'password'
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5 justify-center">
+                <Lock size={13} /> Password Login
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode('otp');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={cn(
+                'flex-1 py-2 text-xs font-bold rounded-lg transition-all',
+                authMode === 'otp'
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5 justify-center">
+                <KeyRound size={13} /> OTP Login
+              </span>
+            </button>
+          </div>
+
           {error && (
             <div className="mb-5 flex items-start gap-2.5 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -171,62 +304,135 @@ export function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <Input
-              label="Email Address"
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="e.g. admin@college.edu or student.email"
-              required
-            />
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Password <span className="text-destructive">*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResetEmail(email);
-                    setIsForgotModalOpen(true);
-                  }}
-                  className="text-xs text-primary font-medium hover:underline cursor-pointer"
-                >
-                  Forgot password?
-                </button>
-              </div>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
+          {/* PASSWORD LOGIN */}
+          {authMode === 'password' && (
+            <form onSubmit={handlePasswordLogin} className="space-y-4">
+              <Input
+                label="Email Address"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="e.g. admin@college.edu"
                 required
-                className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               />
-            </div>
 
-            <Button type="submit" variant="primary" className="w-full mt-2" isLoading={isLoading}>
-              Sign In to Portal <ArrowRight size={16} className="ml-1" />
-            </Button>
-          </form>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Password <span className="text-destructive">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={openForgotModal}
+                    className="text-xs text-primary font-medium hover:underline cursor-pointer"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </div>
 
-          {/* New Student Default Credential Tip */}
+              <Button type="submit" variant="primary" className="w-full mt-2" isLoading={isLoading}>
+                Sign In to Portal <ArrowRight size={16} className="ml-1" />
+              </Button>
+            </form>
+          )}
+
+          {/* OTP LOGIN */}
+          {authMode === 'otp' && (
+            <form onSubmit={handleOtpLogin} className="space-y-4">
+              <Input
+                label="Registered Email"
+                type="email"
+                value={email}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  setOtpSent(false);
+                  setOtpInput('');
+                }}
+                placeholder="e.g. student@college.edu"
+                required
+              />
+
+              {!otpSent ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="w-full"
+                  onClick={handleSendLoginOtp}
+                >
+                  <KeyRound size={16} className="mr-1" /> Send OTP Code
+                </Button>
+              ) : (
+                <>
+                  <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-[11px] text-muted-foreground">
+                    <p className="font-semibold text-foreground mb-1">OTP sent (demo simulation)</p>
+                    <p>
+                      Use this code:{' '}
+                      <code className="text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">{DEMO_OTP}</code>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Enter 6-Digit OTP <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otpInput}
+                      onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="123456"
+                      required
+                      className="flex h-11 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-center text-lg tracking-[0.4em] font-mono text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                  </div>
+
+                  <Button type="submit" variant="primary" className="w-full" isLoading={isLoading}>
+                    Verify OTP & Sign In <ArrowRight size={16} className="ml-1" />
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpSent(false);
+                      setOtpInput('');
+                      setSuccessMsg('');
+                    }}
+                    className="w-full text-xs text-muted-foreground hover:text-primary"
+                  >
+                    Resend OTP / Change email
+                  </button>
+                </>
+              )}
+            </form>
+          )}
+
+          {/* Student tip */}
           <div className="mt-4 p-3 rounded-xl bg-primary/5 border border-primary/10 text-[11px] text-muted-foreground space-y-1">
             <p className="font-semibold text-foreground flex items-center gap-1.5">
-              <KeyRound size={13} className="text-primary" /> Student Onboarding Note
+              <KeyRound size={13} className="text-primary" /> Demo Auth Tip
             </p>
             <p>
-              Newly enrolled students can sign in using their registered email and default initial password: <code className="text-primary font-bold bg-primary/10 px-1 py-0.5 rounded">student123</code>.
+              OTP for login & reset is always{' '}
+              <code className="text-primary font-bold bg-primary/10 px-1 py-0.5 rounded">123456</code>.
+              New students default password:{' '}
+              <code className="text-primary font-bold bg-primary/10 px-1 py-0.5 rounded">student123</code>.
             </p>
           </div>
 
-          {/* Educational Disclaimer */}
           <div className="mt-5 pt-4 border-t border-border flex items-start gap-2 text-[11px] text-muted-foreground leading-relaxed">
             <Info size={14} className="shrink-0 text-primary mt-0.5" />
             <p>
-              <strong>Notice:</strong> This is an interactive frontend application utilizing <code>localStorage</code>.
+              <strong>Notice:</strong> Frontend prototype using <code>localStorage</code>. Real SMS/email OTP comes in backend class.
             </p>
           </div>
         </div>
@@ -235,16 +441,12 @@ export function LoginPage() {
       {/* Forgot / Reset Password Dialog */}
       <Dialog
         isOpen={isForgotModalOpen}
-        onClose={() => {
-          setIsForgotModalOpen(false);
-          setResetError('');
-          setResetSuccess('');
-        }}
-        title="Student / Faculty Password Reset"
-        description="Enter your registered college email address to reset your account password."
+        onClose={closeForgotModal}
+        title="Password Reset"
+        description="Verify your email with OTP, then set a new password."
         maxWidth="md"
       >
-        <form onSubmit={handlePasswordReset} className="space-y-4 text-left">
+        <div className="space-y-4 text-left">
           {resetError && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold">
               <AlertCircle size={15} />
@@ -259,52 +461,111 @@ export function LoginPage() {
             </div>
           )}
 
-          <Input
-            label="Registered College Email"
-            type="email"
-            value={resetEmail}
-            onChange={e => setResetEmail(e.target.value)}
-            placeholder="e.g. alex.johnson@student.college.edu"
-            required
-          />
+          {/* Step 1: Email */}
+          {resetStep === 1 && (
+            <form onSubmit={handleSendResetOtp} className="space-y-4">
+              <Input
+                label="Registered College Email"
+                type="email"
+                value={resetEmail}
+                onChange={e => setResetEmail(e.target.value)}
+                placeholder="e.g. student@college.edu"
+                required
+              />
 
-          <Input
-            label="New Password"
-            type="password"
-            value={newPassword}
-            onChange={e => setNewPassword(e.target.value)}
-            placeholder="Minimum 6 characters"
-            required
-          />
+              <div className="p-3 rounded-xl bg-muted/40 text-[11px] text-muted-foreground">
+                We’ll send a <strong>demo OTP</strong> to verify your identity. Code will be{' '}
+                <code className="text-primary font-bold">123456</code>.
+              </div>
 
-          <Input
-            label="Confirm New Password"
-            type="password"
-            value={confirmPassword}
-            onChange={e => setConfirmPassword(e.target.value)}
-            placeholder="Re-enter your new password"
-            required
-          />
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+                <Button type="button" variant="outline" size="sm" onClick={closeForgotModal}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm">
+                  Send OTP Code
+                </Button>
+              </div>
+            </form>
+          )}
 
-          <div className="p-3 rounded-xl bg-muted/40 text-[11px] text-muted-foreground space-y-1">
-            <p className="font-semibold text-foreground">💡 Default Recovery Option</p>
-            <p>You can also enter <code className="text-primary font-bold">student123</code> to restore standard student credentials.</p>
-          </div>
+          {/* Step 2: OTP + New Password */}
+          {resetStep === 2 && (
+            <form onSubmit={handlePasswordReset} className="space-y-4">
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-[11px] text-muted-foreground">
+                Demo OTP for <strong>{resetEmail}</strong>:{' '}
+                <code className="text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">{DEMO_OTP}</code>
+              </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsForgotModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" size="sm">
-              Update Password
-            </Button>
-          </div>
-        </form>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                  Enter 6-Digit OTP <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={resetOtpInput}
+                  onChange={e => setResetOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="123456"
+                  required
+                  className="flex h-11 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-center text-lg tracking-[0.4em] font-mono text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </div>
+
+              <Input
+                label="New Password"
+                type="password"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Minimum 6 characters"
+                required
+              />
+
+              <Input
+                label="Confirm New Password"
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter your new password"
+                required
+              />
+
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-primary"
+                  onClick={() => {
+                    setResetStep(1);
+                    setResetError('');
+                    setResetSuccess('');
+                  }}
+                >
+                  ← Change email
+                </button>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={closeForgotModal}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="primary" size="sm">
+                    Verify & Update Password
+                  </Button>
+                </div>
+              </div>
+            </form>
+          )}
+
+          {/* Step 3: Success flash (auto-closes) */}
+          {resetStep === 3 && (
+            <div className="text-center py-6 space-y-3">
+              <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                <CheckCircle2 size={28} />
+              </div>
+              <p className="text-sm font-semibold text-foreground">Password reset successful!</p>
+              <p className="text-xs text-muted-foreground">Redirecting you back to sign in…</p>
+            </div>
+          )}
+        </div>
       </Dialog>
     </div>
   );
