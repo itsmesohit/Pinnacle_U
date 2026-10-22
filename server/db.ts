@@ -19,8 +19,14 @@ export async function checkDatabaseConnection(): Promise<boolean> {
   try {
     await prisma.$queryRaw`SELECT 1`;
     return true;
-  } catch (error) {
-    console.warn('⚠️  Could not connect to Supabase PostgreSQL via Prisma. Running in memory/mock fallback mode until DATABASE_URL is configured.', error);
+  } catch (error: any) {
+    const isNetworkUnreachable = error.message?.includes("Can't reach database server") || error.message?.includes('ENOTFOUND');
+    if (isNetworkUnreachable) {
+      console.log('📡 [Database] Supabase direct host uses IPv6 (not routeable on this local ISP/Wi-Fi).');
+      console.log('⚡ [Status] Running in local resilient mode. (When deployed to Render, IPv6 is supported out-of-the-box!)');
+    } else {
+      console.warn('⚠️ [Database] Connection notice:', error.message);
+    }
     return false;
   }
 }

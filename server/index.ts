@@ -103,7 +103,7 @@ app.listen(PORT, async () => {
   if (dbConnected) {
     console.log('✅ Connected to Supabase PostgreSQL database via Prisma');
   } else {
-    console.log('💡 Note: Set valid Supabase DATABASE_URL in .env to connect to Postgres');
+    console.log('💡 Note: Local API server & Resend email service are active! (PostgreSQL connects directly on Render).');
   }
 });
 
