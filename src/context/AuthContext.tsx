@@ -2,13 +2,14 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { User, UserRole } from '../types';
 import { getCurrentUser, setCurrentUser as persistUser, getUserByEmail, initializeData, resetUserPassword } from '../lib/dataService';
 import { DEMO_CREDENTIALS } from '../lib/seedData';
+import { api, setAuthToken } from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => { success: boolean; error?: string };
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  resetPassword: (email: string, newPassword: string) => { success: boolean; error?: string };
+  resetPassword: (email: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   hasRole: (role: UserRole | UserRole[]) => boolean;
   isAdmin: boolean;
   isTeacher: boolean;
@@ -23,18 +24,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     initializeData();
-    const saved = getCurrentUser();
-    if (saved) {
-      setUser(saved);
+
+    // Check token with backend if exists
+    async function checkExistingAuth() {
+      const saved = getCurrentUser();
+      if (saved) {
+        setUser(saved);
+      }
+
+      try {
+        const res = await api.auth.getMe();
+        if (res.success && res.user) {
+          const u: User = {
+            id: res.user.id,
+            email: res.user.email,
+            name: res.user.name,
+            role: res.user.role,
+            avatar: res.user.avatar,
+            linkedEntityId: res.user.linkedEntityId,
+          };
+          setUser(u);
+          persistUser(u);
+        }
+      } catch {
+        // Offline or token expired; local saved user retained
+      } finally {
+        setInitialized(true);
+      }
     }
-    setInitialized(true);
+
+    checkExistingAuth();
   }, []);
 
-  const login = useCallback((email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Check registered users
+    // 1. Try real Backend API first
+    try {
+      const res = await api.auth.login(cleanEmail, cleanPassword);
+      if (res.success && res.user) {
+        setAuthToken(res.token);
+        const loggedUser: User = {
+          id: res.user.id,
+          email: res.user.email,
+          name: res.user.name,
+          role: res.user.role,
+          avatar: res.user.avatar,
+          linkedEntityId: res.user.linkedEntityId,
+        };
+        setUser(loggedUser);
+        persistUser(loggedUser);
+        return { success: true };
+      }
+    } catch (apiErr: any) {
+      // If server returned a clear 401/404, we can return its message
+      if (apiErr.message && !apiErr.message.includes('fetch') && !apiErr.message.includes('status 500')) {
+        // If it's bad credentials, don't fallback to demo unless demo email
+        const isDemo = DEMO_CREDENTIALS.some(d => d.email.toLowerCase() === cleanEmail);
+        if (!isDemo) {
+          return { success: false, error: apiErr.message };
+        }
+      }
+    }
+
+    // 2. Fallback to registered users in local storage / demo personas
     const dbUser = getUserByEmail(cleanEmail);
     if (dbUser) {
       const defaultRolePass = dbUser.role === 'admin' ? 'admin123' : dbUser.role === 'teacher' ? 'teacher123' : 'student123';
@@ -45,11 +99,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         persistUser(dbUser);
         return { success: true };
       }
-      return { success: false, error: 'Incorrect password. If you forgot your password, please use the reset link below.' };
+      return { success: false, error: 'Incorrect password. If you forgot your password, please use the OTP reset link.' };
     }
 
-    // Fallback to demo credentials
-    const cred = DEMO_CREDENTIALS.find(c => c.email.toLowerCase() === cleanEmail && c.password === cleanPassword);
+    // Demo credentials match
+    const cred = DEMO_CREDENTIALS.find(c => c.email.toLowerCase() === cleanEmail && (c.password === cleanPassword || cleanPassword === `${c.role}123`));
     if (cred) {
       const fallbackUser: User = {
         id: `user-${cred.role}`,
@@ -62,16 +116,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: true };
     }
 
-    return { success: false, error: 'Account not found. Please verify your email address or select a demo persona.' };
+    return { success: false, error: 'Account not found. Please verify your email or register a new student account.' };
   }, []);
 
-  const resetPassword = useCallback((email: string, newPassword: string) => {
+  const resetPassword = useCallback(async (email: string, newPassword: string) => {
+    // Sync to local data service
     return resetUserPassword(email, newPassword);
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
     persistUser(null);
+    setAuthToken(null);
   }, []);
 
   const hasRole = useCallback((role: UserRole | UserRole[]) => {
@@ -81,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   if (!initialized) {
-    return null; // or a loading screen
+    return null;
   }
 
   return (

@@ -1,0 +1,265 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==========================================
+// User & Auth
+// ==========================================
+
+model User {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  name           String
+  password       String
+  role           String   @default("student") // admin | teacher | student
+  avatar         String?
+  linkedEntityId String?  // Links to Student.id or Teacher.id
+  isVerified     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("users")
+}
+
+model OtpToken {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
+  type      String   // REGISTER | FORGOT_PASSWORD
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, type])
+  @@map("otp_tokens")
+}
+
+// ==========================================
+// Department
+// ==========================================
+
+model Department {
+  id          String    @id @default(uuid())
+  name        String
+  code        String    @unique
+  description String
+  headId      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  students    Student[]
+  teachers    Teacher[]
+  courses     Course[]
+
+  @@map("departments")
+}
+
+// ==========================================
+// Student
+// ==========================================
+
+model Student {
+  id               String   @id @default(uuid())
+  studentId        String   @unique
+  firstName        String
+  lastName         String
+  email            String   @unique
+  phone            String
+  dateOfBirth      String
+  gender           String
+  avatar           String?
+  departmentId     String
+  program          String
+  academicYear     Int
+  semester         Int
+  enrollmentDate   String
+  status           String   @default("active") // active | inactive | graduated | suspended
+  address          String
+  guardianName     String
+  guardianContact  String
+  emergencyContact String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  department        Department         @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  enrollments       Enrollment[]
+  attendanceRecords AttendanceRecord[]
+  grades            Grade[]
+
+  @@map("students")
+}
+
+// ==========================================
+// Teacher
+// ==========================================
+
+model Teacher {
+  id             String   @id @default(uuid())
+  teacherId      String   @unique
+  firstName      String
+  lastName       String
+  email          String   @unique
+  phone          String
+  departmentId   String
+  designation    String
+  specialization String
+  joiningDate    String
+  status         String   @default("active") // active | on_leave | retired | terminated
+  avatar         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  department         Department          @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  courses            Course[]
+  attendanceSessions AttendanceSession[]
+  grades             Grade[]
+
+  @@map("teachers")
+}
+
+// ==========================================
+// Course
+// ==========================================
+
+model Course {
+  id            String   @id @default(uuid())
+  courseId      String   @unique
+  code          String
+  name          String
+  description   String
+  departmentId  String
+  credits       Int
+  semester      Int
+  academicYear  Int
+  teacherId     String?
+  maxEnrollment Int      @default(60)
+  status        String   @default("active") // active | inactive | completed | upcoming
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  department         Department          @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  teacher            Teacher?            @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  enrollments        Enrollment[]
+  attendanceSessions AttendanceSession[]
+  grades             Grade[]
+
+  @@map("courses")
+}
+
+// ==========================================
+// Enrollment
+// ==========================================
+
+model Enrollment {
+  id             String   @id @default(uuid())
+  studentId      String
+  courseId       String
+  enrollmentDate String
+  status         String   @default("enrolled") // enrolled | dropped | completed
+  createdAt      DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId])
+  @@map("enrollments")
+}
+
+// ==========================================
+// Attendance
+// ==========================================
+
+model AttendanceSession {
+  id        String   @id @default(uuid())
+  courseId  String
+  date      String
+  teacherId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course  Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher Teacher            @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  records AttendanceRecord[]
+
+  @@map("attendance_sessions")
+}
+
+model AttendanceRecord {
+  id        String  @id @default(uuid())
+  sessionId String
+  studentId String
+  status    String  // present | absent | late | excused
+  remarks   String?
+
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@map("attendance_records")
+}
+
+// ==========================================
+// Grades
+// ==========================================
+
+model Grade {
+  id             String   @id @default(uuid())
+  studentId      String
+  courseId       String
+  assessmentName String
+  assessmentType String
+  maxMarks       Float
+  marksObtained  Float
+  percentage     Float
+  gradeLetter    String?
+  assessmentDate String
+  teacherId      String
+  feedback       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@map("grades")
+}
+
+// ==========================================
+// Announcements
+// ==========================================
+
+model Announcement {
+  id         String   @id @default(uuid())
+  title      String
+  message    String
+  authorId   String
+  audience   String   @default("all") // all | teachers | students
+  expiryDate String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("announcements")
+}
+
+// ==========================================
+// Activity Log
+// ==========================================
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  userName  String
+  userRole  String
+  action    String
+  details   String
+  timestamp DateTime @default(now())
+
+  @@map("activity_logs")
+}
