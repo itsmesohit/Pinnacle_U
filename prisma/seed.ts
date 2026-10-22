@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { generateSeedData, DEMO_CREDENTIALS } from '../src/lib/seedData';
+import { generateSeedData } from '../src/lib/seedData';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting Pinnacle University database seeding into Supabase PostgreSQL...');
+  console.log('🌱 Starting Pinnacle University database seeding into Supabase PostgreSQL (Batch Optimized)...');
 
   const {
     departments,
@@ -38,192 +38,170 @@ async function main() {
     console.warn('Note during clean up:', err.message);
   }
 
-  // 2. Seed Departments
+  // 2. Batch Seed Departments
   console.log(`🏢 Seeding ${departments.length} departments...`);
-  for (const dept of departments) {
-    await prisma.department.create({
-      data: {
-        id: dept.id,
-        name: dept.name,
-        code: dept.code,
-        description: dept.description,
-        headId: dept.headId || null,
-      },
-    });
-  }
+  await prisma.department.createMany({
+    data: departments.map(d => ({
+      id: d.id,
+      name: d.name,
+      code: d.code,
+      description: d.description,
+      headId: d.headId || null,
+    })),
+    skipDuplicates: true,
+  });
 
-  // 3. Seed Teachers
+  // 3. Batch Seed Teachers
   console.log(`👨‍🏫 Seeding ${teachers.length} teachers...`);
-  for (const tch of teachers) {
-    await prisma.teacher.create({
-      data: {
-        id: tch.id,
-        teacherId: tch.teacherId,
-        firstName: tch.firstName,
-        lastName: tch.lastName,
-        email: tch.email,
-        phone: tch.phone,
-        departmentId: tch.departmentId,
-        designation: tch.designation,
-        specialization: tch.specialization,
-        joiningDate: tch.joiningDate,
-        status: tch.status,
-      },
-    });
-  }
+  await prisma.teacher.createMany({
+    data: teachers.map(t => ({
+      id: t.id,
+      teacherId: t.teacherId,
+      firstName: t.firstName,
+      lastName: t.lastName,
+      email: t.email,
+      phone: t.phone,
+      departmentId: t.departmentId,
+      designation: t.designation,
+      specialization: t.specialization,
+      joiningDate: t.joiningDate,
+      status: t.status,
+    })),
+    skipDuplicates: true,
+  });
 
-  // 4. Seed Courses
+  // 4. Batch Seed Courses
   console.log(`📚 Seeding ${courses.length} courses...`);
-  for (const crs of courses) {
-    await prisma.course.create({
-      data: {
-        id: crs.id,
-        courseId: crs.courseId,
-        code: crs.code,
-        name: crs.name,
-        description: crs.description,
-        departmentId: crs.departmentId,
-        credits: crs.credits,
-        semester: crs.semester,
-        academicYear: crs.academicYear,
-        teacherId: crs.teacherId || null,
-        maxEnrollment: crs.maxEnrollment,
-        status: crs.status,
-      },
-    });
-  }
+  await prisma.course.createMany({
+    data: courses.map(c => ({
+      id: c.id,
+      courseId: c.courseId,
+      code: c.code,
+      name: c.name,
+      description: c.description,
+      departmentId: c.departmentId,
+      credits: c.credits,
+      semester: c.semester,
+      academicYear: c.academicYear,
+      teacherId: c.teacherId || null,
+      maxEnrollment: c.maxEnrollment,
+      status: c.status,
+    })),
+    skipDuplicates: true,
+  });
 
-  // 5. Seed Students
+  // 5. Batch Seed Students
   console.log(`🎓 Seeding ${students.length} students...`);
-  for (const stu of students) {
-    await prisma.student.create({
-      data: {
-        id: stu.id,
-        studentId: stu.studentId,
-        firstName: stu.firstName,
-        lastName: stu.lastName,
-        email: stu.email,
-        phone: stu.phone,
-        dateOfBirth: stu.dateOfBirth,
-        gender: stu.gender,
-        departmentId: stu.departmentId,
-        program: stu.program,
-        academicYear: stu.academicYear,
-        semester: stu.semester,
-        enrollmentDate: stu.enrollmentDate,
-        status: stu.status,
-        address: stu.address,
-        guardianName: stu.guardianName,
-        guardianContact: stu.guardianContact,
-        emergencyContact: stu.emergencyContact || null,
-      },
-    });
-  }
+  await prisma.student.createMany({
+    data: students.map(s => ({
+      id: s.id,
+      studentId: s.studentId,
+      firstName: s.firstName,
+      lastName: s.lastName,
+      email: s.email,
+      phone: s.phone,
+      dateOfBirth: s.dateOfBirth,
+      gender: s.gender,
+      departmentId: s.departmentId,
+      program: s.program,
+      academicYear: s.academicYear,
+      semester: s.semester,
+      enrollmentDate: s.enrollmentDate,
+      status: s.status,
+      address: s.address,
+      guardianName: s.guardianName,
+      guardianContact: s.guardianContact,
+      emergencyContact: s.emergencyContact || null,
+    })),
+    skipDuplicates: true,
+  });
 
-  // 6. Seed Enrollments
+  // 6. Batch Seed Enrollments
   console.log(`📝 Seeding ${enrollments.length} enrollments...`);
-  for (const enr of enrollments) {
-    try {
-      await prisma.enrollment.create({
-        data: {
-          id: enr.id,
-          studentId: enr.studentId,
-          courseId: enr.courseId,
-          enrollmentDate: enr.enrollmentDate,
-          status: enr.status,
-        },
-      });
-    } catch {}
-  }
+  await prisma.enrollment.createMany({
+    data: enrollments.map(e => ({
+      id: e.id,
+      studentId: e.studentId,
+      courseId: e.courseId,
+      enrollmentDate: e.enrollmentDate,
+      status: e.status,
+    })),
+    skipDuplicates: true,
+  });
 
-  // 7. Seed Attendance Sessions & Records
+  // 7. Batch Seed Attendance Sessions & Records
   console.log(`🗓️ Seeding ${attendanceSessions.length} attendance sessions...`);
-  for (const session of attendanceSessions) {
-    try {
-      await prisma.attendanceSession.create({
-        data: {
-          id: session.id,
-          courseId: session.courseId,
-          date: session.date,
-          teacherId: session.teacherId,
-        },
-      });
-    } catch {}
-  }
+  await prisma.attendanceSession.createMany({
+    data: attendanceSessions.map(s => ({
+      id: s.id,
+      courseId: s.courseId,
+      date: s.date,
+      teacherId: s.teacherId,
+    })),
+    skipDuplicates: true,
+  });
 
   console.log(`📋 Seeding ${attendanceRecords.length} attendance records...`);
-  for (const rec of attendanceRecords) {
-    try {
-      await prisma.attendanceRecord.create({
-        data: {
-          id: rec.id,
-          sessionId: rec.sessionId,
-          studentId: rec.studentId,
-          status: rec.status,
-          remarks: rec.remarks || null,
-        },
-      });
-    } catch {}
-  }
+  await prisma.attendanceRecord.createMany({
+    data: attendanceRecords.map(r => ({
+      id: r.id,
+      sessionId: r.sessionId,
+      studentId: r.studentId,
+      status: r.status,
+      remarks: r.remarks || null,
+    })),
+    skipDuplicates: true,
+  });
 
-  // 8. Seed Grades
+  // 8. Batch Seed Grades
   console.log(`📊 Seeding ${grades.length} grades...`);
-  for (const grd of grades) {
-    try {
-      await prisma.grade.create({
-        data: {
-          id: grd.id,
-          studentId: grd.studentId,
-          courseId: grd.courseId,
-          assessmentName: grd.assessmentName,
-          assessmentType: grd.assessmentType,
-          maxMarks: grd.maxMarks,
-          marksObtained: grd.marksObtained,
-          percentage: grd.percentage,
-          gradeLetter: grd.gradeLetter || null,
-          assessmentDate: grd.assessmentDate,
-          teacherId: grd.teacherId,
-          feedback: grd.feedback || null,
-        },
-      });
-    } catch {}
-  }
+  await prisma.grade.createMany({
+    data: grades.map(g => ({
+      id: g.id,
+      studentId: g.studentId,
+      courseId: g.courseId,
+      assessmentName: g.assessmentName,
+      assessmentType: g.assessmentType,
+      maxMarks: g.maxMarks,
+      marksObtained: g.marksObtained,
+      percentage: g.percentage,
+      gradeLetter: g.gradeLetter || null,
+      assessmentDate: g.assessmentDate,
+      teacherId: g.teacherId,
+      feedback: g.feedback || null,
+    })),
+    skipDuplicates: true,
+  });
 
-  // 9. Seed Announcements
+  // 9. Batch Seed Announcements
   console.log(`📢 Seeding ${announcements.length} announcements...`);
-  for (const ann of announcements) {
-    await prisma.announcement.create({
-      data: {
-        id: ann.id,
-        title: ann.title,
-        message: ann.message,
-        authorId: ann.authorId,
-        audience: ann.audience,
-        expiryDate: ann.expiryDate || null,
-      },
-    });
-  }
+  await prisma.announcement.createMany({
+    data: announcements.map(a => ({
+      id: a.id,
+      title: a.title,
+      message: a.message,
+      authorId: a.authorId,
+      audience: a.audience,
+      expiryDate: a.expiryDate || null,
+    })),
+    skipDuplicates: true,
+  });
 
-  // 10. Seed Users (Demo users + students + teachers with bcrypt hashed passwords)
-  console.log('🔑 Provisioning user accounts with encrypted passwords...');
+  // 10. Provision Users (Demo Users + Students + Teachers)
+  console.log('🔑 Provisioning user accounts with encrypted passwords in batch...');
   const studentHashedPass = await bcrypt.hash('student123', 10);
   const teacherHashedPass = await bcrypt.hash('teacher123', 10);
   const adminHashedPass = await bcrypt.hash('admin123', 10);
 
-  // Demo Admin
-  await prisma.user.create({
-    data: {
+  const usersToCreate = [
+    {
       email: 'admin@college.edu',
       name: 'Dr. Sarah Mitchell',
       password: adminHashedPass,
       role: 'admin',
       isVerified: true,
     },
-  });
-
-  // Demo Teacher
-  await prisma.user.create({
-    data: {
+    {
       email: 'teacher@college.edu',
       name: 'Prof. James Wilson',
       password: teacherHashedPass,
@@ -231,11 +209,7 @@ async function main() {
       linkedEntityId: 'teacher-1',
       isVerified: true,
     },
-  });
-
-  // Demo Student
-  await prisma.user.create({
-    data: {
+    {
       email: 'student@college.edu',
       name: 'Alex Johnson',
       password: studentHashedPass,
@@ -243,29 +217,20 @@ async function main() {
       linkedEntityId: 'stu-1',
       isVerified: true,
     },
-  });
+    ...students.map(s => ({
+      email: s.email,
+      name: `${s.firstName} ${s.lastName}`,
+      password: studentHashedPass,
+      role: 'student',
+      linkedEntityId: s.id,
+      isVerified: true,
+    })),
+  ];
 
-  // Also create accounts for all students with default password "student123"
-  for (const stu of students) {
-    try {
-      await prisma.user.upsert({
-        where: { email: stu.email },
-        update: {
-          name: `${stu.firstName} ${stu.lastName}`,
-          linkedEntityId: stu.id,
-          role: 'student',
-        },
-        create: {
-          email: stu.email,
-          name: `${stu.firstName} ${stu.lastName}`,
-          password: studentHashedPass,
-          role: 'student',
-          linkedEntityId: stu.id,
-          isVerified: true,
-        },
-      });
-    } catch {}
-  }
+  await prisma.user.createMany({
+    data: usersToCreate,
+    skipDuplicates: true,
+  });
 
   console.log('🎉 Seeding successfully completed! All tables are populated in Supabase PostgreSQL.');
 }
