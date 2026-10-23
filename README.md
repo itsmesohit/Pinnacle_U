@@ -187,28 +187,43 @@ src/
 
 ---
 
-## 🌐 Static Deployment Instructions
+---
 
-The application is completely static and can be deployed directly to any static hosting provider.
+## 🚀 Production Deployment Guide
 
-### Deploy to Vercel
-1. Install Vercel CLI: `npm i -g vercel`
-2. Run `vercel` from the root directory.
-3. Configure build command: `npm run build` and output directory: `dist`.
+### 1. Backend Deployment (Render)
+1. In [Render Dashboard](https://dashboard.render.com), create a new **Web Service**.
+2. Connect your GitHub repository: `git@github.com:itsmesohit/Pinnacle_U.git`.
+3. Configure the service settings:
+   - **Environment:** `Node`
+   - **Build Command:** `npm install && npx prisma generate`
+   - **Start Command:** `npm run start:server`
+   - **Health Check Path:** `/health`
+4. Add the following **Environment Variables** in Render:
+   - `DATABASE_URL`: Transaction mode Supabase pooler URL (`...:6543/postgres?pgbouncer=true`)
+   - `DIRECT_URL`: Direct mode Supabase pooler URL (`...:5432/postgres`)
+   - `RESEND_API_KEY`: Your Resend API key (`re_...`)
+   - `RESEND_FROM_EMAIL`: Verified sender (e.g., `Pinnacle University <auth@codingspark.in>`)
+   - `JWT_SECRET`: A long random secret key
+   - `PORT`: `5001` (Render will bind automatically)
+   - `CORS_ORIGIN`: `*` (or your Vercel frontend URL)
 
-### Deploy to Netlify
-1. Connect repository in the Netlify dashboard.
-2. Build command: `npm run build`
-3. Publish directory: `dist`
-4. Add a `_redirects` file in `public/` with:
-   ```text
-   /*    /index.html   200
-   ```
+### 2. Frontend Deployment (Vercel)
+1. In [Vercel Dashboard](https://vercel.com/new), import your repository: `Pinnacle_U`.
+2. Configure project settings:
+   - **Framework Preset:** `Vite`
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+3. Add the **Environment Variable** in Vercel:
+   - `VITE_API_URL`: Your Render backend URL with `/api` path (e.g. `https://your-backend.onrender.com/api`).
+4. Click **Deploy**.
 
 ---
 
-## 🔒 Security & Prototype Notice
+## 🔒 Production Security & Architecture
 
-> **Important:** This is a client-side frontend prototype built for evaluation and demonstration.
-> - Data is persisted inside the browser's `localStorage` and is isolated to your specific browser profile.
-> - Authentication and role-based permissions are simulated client-side. In a production environment, authorization checks and credential handling must be enforced by a hardened backend API and database.
+- **Database:** Supabase PostgreSQL with pooled connection handling (`pgbouncer=true`).
+- **ORM:** Prisma Client with relational models for users, students, teachers, courses, attendance, grades, announcements, and audit logs.
+- **Authentication:** Dual-mode security with bcrypt-hashed passwords and real email OTP delivery via the Resend API with domain DKIM/SPF verification.
+- **Session Tokens:** Stateless, cryptographically signed JSON Web Tokens (JWT) with role-based claims.
+
