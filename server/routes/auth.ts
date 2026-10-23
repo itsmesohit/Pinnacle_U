@@ -253,15 +253,22 @@ authRouter.post('/login-otp', async (req, res) => {
               isVerified: true,
             },
           });
+        } else {
+          // Seamless passwordless signup: auto-provision new student account
+          const rawName = cleanEmail.split('@')[0].replace(/[._-]/g, ' ');
+          const formattedName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+          const defaultPassword = await bcrypt.hash('student123', 10);
+          user = await prisma.user.create({
+            data: {
+              email: cleanEmail,
+              name: formattedName || 'Student User',
+              password: defaultPassword,
+              role: 'student',
+              isVerified: true,
+            },
+          });
         }
       }
-    }
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'No registered account found with this email. Please register as a new student.',
-      });
     }
 
     const result = await createAndSendOtp(cleanEmail, 'LOGIN', user.name);
