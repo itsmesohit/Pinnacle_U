@@ -14,7 +14,7 @@ import { announcementsRouter } from './routes/announcements';
 import { analyticsRouter } from './routes/analytics';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // CORS configuration - handles local dev, Vercel frontends, and custom domains
 const allowedOrigins = process.env.CORS_ORIGIN === '*'

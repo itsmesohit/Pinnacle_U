@@ -5,7 +5,7 @@ import { sendOtpEmail } from './emailService';
 interface CachedOtp {
   email: string;
   otp: string;
-  type: 'REGISTER' | 'FORGOT_PASSWORD';
+  type: 'REGISTER' | 'FORGOT_PASSWORD' | 'LOGIN';
   expiresAt: Date;
 }
 
@@ -17,7 +17,7 @@ export function generateNumericOtp(): string {
 
 export async function createAndSendOtp(
   email: string,
-  purpose: 'REGISTER' | 'FORGOT_PASSWORD',
+  purpose: 'REGISTER' | 'FORGOT_PASSWORD' | 'LOGIN',
   name?: string
 ): Promise<{ success: boolean; simulated?: boolean; error?: string; otpPreview?: string }> {
   const cleanEmail = email.trim().toLowerCase();
@@ -75,7 +75,7 @@ export async function createAndSendOtp(
 export async function verifyOtp(
   email: string,
   otp: string,
-  purpose: 'REGISTER' | 'FORGOT_PASSWORD'
+  purpose: 'REGISTER' | 'FORGOT_PASSWORD' | 'LOGIN'
 ): Promise<{ valid: boolean; error?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   const cleanOtp = otp.trim();

@@ -12,19 +12,34 @@ interface SendOtpEmailParams {
   toEmail: string;
   name?: string;
   otp: string;
-  purpose: 'REGISTER' | 'FORGOT_PASSWORD';
+  purpose: 'REGISTER' | 'FORGOT_PASSWORD' | 'LOGIN';
 }
 
 export async function sendOtpEmail({
   toEmail,
-  name = 'Student',
+  name = 'User',
   otp,
   purpose,
 }: SendOtpEmailParams): Promise<{ success: boolean; simulated?: boolean; error?: string }> {
   const isRegister = purpose === 'REGISTER';
+  const isLogin = purpose === 'LOGIN';
   const subject = isRegister
     ? `🔐 ${otp} is your Pinnacle University Account Verification Code`
+    : isLogin
+    ? `🔐 ${otp} is your Pinnacle University Login Code`
     : `🔑 ${otp} is your Pinnacle University Password Reset Code`;
+
+  const title = isRegister
+    ? 'Verify Your Account'
+    : isLogin
+    ? 'One-Time Login Code'
+    : 'Reset Your Password';
+
+  const subtitle = isRegister
+    ? 'Thank you for registering at Pinnacle University. Use the single-use OTP below to complete your account setup.'
+    : isLogin
+    ? 'Use the single-use verification code below to sign in to your Pinnacle University portal.'
+    : 'We received a request to reset your Pinnacle University account password. Use this OTP to set your new password.';
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -53,13 +68,10 @@ export async function sendOtpEmail({
             <div class="logo-sub">Student & Academic Management System</div>
           </div>
           <div class="content">
-            <div class="title">${isRegister ? 'Verify Your Account' : 'Reset Your Password'}</div>
+            <div class="title">${title}</div>
             <div class="subtitle">
               Hello <strong>${name}</strong>,<br/>
-              ${isRegister
-                ? 'Thank you for registering at Pinnacle University. Use the single-use OTP below to complete your account setup.'
-                : 'We received a request to reset your Pinnacle University account password. Use this OTP to set your new password.'
-              }
+              ${subtitle}
             </div>
             <div class="otp-card">
               <div class="otp-code">${otp}</div>

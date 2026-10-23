@@ -195,6 +195,13 @@ async function main() {
 
   const usersToCreate = [
     {
+      email: 'itsmesohit.in@gmail.com',
+      name: 'Sohit Kushwaha (Admin)',
+      password: adminHashedPass,
+      role: 'admin',
+      isVerified: true,
+    },
+    {
       email: 'admin@college.edu',
       name: 'Dr. Sarah Mitchell',
       password: adminHashedPass,

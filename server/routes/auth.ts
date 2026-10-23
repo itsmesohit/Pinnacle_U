@@ -206,7 +206,127 @@ authRouter.post('/verify-reset-otp', async (req, res) => {
 });
 
 // ==========================================
-// 5. Standard Login
+// 5. Send OTP for Login
+// ==========================================
+authRouter.post('/login-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Find user in Supabase PostgreSQL
+    let user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (!user) {
+      // Check if student exists with this email, auto-create user account if so
+      const student = await prisma.student.findUnique({ where: { email: cleanEmail } });
+      if (student) {
+        const hashedPassword = await bcrypt.hash('student123', 10);
+        user = await prisma.user.create({
+          data: {
+            email: student.email,
+            name: `${student.firstName} ${student.lastName}`,
+            password: hashedPassword,
+            role: 'student',
+            linkedEntityId: student.id,
+            isVerified: true,
+          },
+        });
+      } else {
+        const teacher = await prisma.teacher.findUnique({ where: { email: cleanEmail } });
+        if (teacher) {
+          const hashedPassword = await bcrypt.hash('teacher123', 10);
+          user = await prisma.user.create({
+            data: {
+              email: teacher.email,
+              name: `${teacher.firstName} ${teacher.lastName}`,
+              password: hashedPassword,
+              role: 'teacher',
+              linkedEntityId: teacher.id,
+              isVerified: true,
+            },
+          });
+        }
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'No registered account found with this email. Please register as a new student.',
+      });
+    }
+
+    const result = await createAndSendOtp(cleanEmail, 'LOGIN', user.name);
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error || 'Failed to send OTP email via Resend' });
+    }
+
+    return res.json({
+      success: true,
+      message: `A 6-digit login verification code has been sent to ${cleanEmail}. Please check your inbox.`,
+    });
+  } catch (err: any) {
+    console.error('Error in login-otp:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to send login OTP' });
+  }
+});
+
+// ==========================================
+// 6. Verify Login OTP & Issue JWT
+// ==========================================
+authRouter.post('/verify-login-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, error: 'Email and OTP code are required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
+    // Verify OTP
+    const verification = await verifyOtp(cleanEmail, cleanOtp, 'LOGIN');
+    if (!verification.valid) {
+      return res.status(400).json({ success: false, error: verification.error || 'Invalid or expired OTP code' });
+    }
+
+    // Fetch user from Supabase PostgreSQL
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User record not found' });
+    }
+
+    const token = signJwtToken({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role as any,
+      linkedEntityId: user.linkedEntityId || undefined,
+    });
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        linkedEntityId: user.linkedEntityId,
+        avatar: user.avatar,
+      },
+    });
+  } catch (err: any) {
+    console.error('Error in verify-login-otp:', err);
+    return res.status(500).json({ success: false, error: err.message || 'OTP Login failed' });
+  }
+});
+
+// ==========================================
+// 7. Standard Password Login (Production)
 // ==========================================
 authRouter.post('/login', async (req, res) => {
   try {
@@ -218,27 +338,15 @@ authRouter.post('/login', async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Check user in Prisma
-    let user = null;
-    try {
-      user = await prisma.user.findUnique({ where: { email: cleanEmail } });
-    } catch {
-      // In case DB is not yet connected
-    }
+    // Check user in Supabase PostgreSQL
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
 
     if (user) {
-      // Check password (bcrypt or plain demo match)
       let isMatch = false;
       if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
         isMatch = await bcrypt.compare(cleanPassword, user.password);
       } else {
         isMatch = user.password === cleanPassword;
-      }
-
-      // Default role fallback passwords for convenience
-      const defaultRolePass = user.role === 'admin' ? 'admin123' : user.role === 'teacher' ? 'teacher123' : 'student123';
-      if (!isMatch && cleanPassword === defaultRolePass) {
-        isMatch = true;
       }
 
       if (isMatch) {
@@ -264,43 +372,12 @@ authRouter.post('/login', async (req, res) => {
         });
       }
 
-      return res.status(401).json({ success: false, error: 'Invalid password. If you forgot your password, please request an OTP to reset it.' });
-    }
-
-    // Default demo personas fallback if user hasn't seeded yet
-    const demoAccounts = [
-      { email: 'admin@college.edu', role: 'admin', name: 'Dr. Sarah Mitchell', pass: 'admin123' },
-      { email: 'sarah.mitchell@college.edu', role: 'admin', name: 'Dr. Sarah Mitchell', pass: 'admin123' },
-      { email: 'teacher@college.edu', role: 'teacher', name: 'Prof. Alan Turing', pass: 'teacher123' },
-      { email: 'alan.turing@college.edu', role: 'teacher', name: 'Prof. Alan Turing', pass: 'teacher123' },
-      { email: 'student@college.edu', role: 'student', name: 'Alex Johnson', pass: 'student123' },
-      { email: 'alex.johnson@college.edu', role: 'student', name: 'Alex Johnson', pass: 'student123' },
-    ];
-
-    const demo = demoAccounts.find(d => d.email === cleanEmail && (cleanPassword === d.pass || cleanPassword === `${d.role}123`));
-    if (demo) {
-      const token = signJwtToken({
-        id: `demo-${demo.role}`,
-        email: demo.email,
-        name: demo.name,
-        role: demo.role as any,
-      });
-
-      return res.json({
-        success: true,
-        token,
-        user: {
-          id: `demo-${demo.role}`,
-          email: demo.email,
-          name: demo.name,
-          role: demo.role,
-        },
-      });
+      return res.status(401).json({ success: false, error: 'Invalid password. If you forgot your password, please use the OTP reset link.' });
     }
 
     return res.status(404).json({
       success: false,
-      error: 'Account not found. Please register a new account or check demo credentials.',
+      error: 'Account not found. Please register a new student account or verify your email.',
     });
   } catch (err: any) {
     console.error('Error in login:', err);

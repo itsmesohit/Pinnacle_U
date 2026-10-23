@@ -72,6 +72,18 @@ export const api = {
         { method: 'POST', body: JSON.stringify(payload) }
       ),
 
+    requestLoginOtp: (email: string) =>
+      request<{ success: boolean; message: string; simulated?: boolean; otpPreview?: string }>(
+        '/auth/login-otp',
+        { method: 'POST', body: JSON.stringify({ email }) }
+      ),
+
+    verifyLoginOtp: (payload: { email: string; otp: string }) =>
+      request<{ success: boolean; token: string; user: any; message?: string }>(
+        '/auth/verify-login-otp',
+        { method: 'POST', body: JSON.stringify(payload) }
+      ),
+
     login: (email: string, password: string) =>
       request<{ success: boolean; token: string; user: any }>('/auth/login', {
         method: 'POST',

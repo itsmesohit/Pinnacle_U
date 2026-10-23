@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { DEMO_CREDENTIALS } from '@/lib/seedData';
-import { resetUserPassword } from '@/lib/dataService';
 import { api } from '@/lib/api';
 import {
-  GraduationCap, ShieldCheck, UserCheck, BookOpen, Mail,
-  ArrowRight, AlertCircle, Info, KeyRound, CheckCircle2, Lock, UserPlus
+  GraduationCap, Mail, ArrowRight, AlertCircle, KeyRound,
+  CheckCircle2, Lock, UserPlus, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -15,16 +13,16 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 
 type AuthMode = 'password' | 'otp';
-type ResetStep = 1 | 2 | 3; // 1=email, 2=otp+new password, 3=done
+type ResetStep = 1 | 2 | 3;
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithOtp } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [authMode, setAuthMode] = useState<AuthMode>('password');
-  const [email, setEmail] = useState('admin@college.edu');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,7 +30,7 @@ export function LoginPage() {
   // OTP Login
   const [otpSent, setOtpSent] = useState(false);
   const [otpInput, setOtpInput] = useState('');
-  const DEMO_OTP = '123456';
+  const [isOtpSending, setIsOtpSending] = useState(false);
 
   // Forgot Password Modal
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
@@ -43,6 +41,7 @@ export function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
+  const [isResetLoading, setIsResetLoading] = useState(false);
 
   // Register Modal
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -57,38 +56,57 @@ export function LoginPage() {
 
   const from = location.state?.from?.pathname || '/dashboard';
 
-  // ---------- Password Login ----------
+  // ---------- 1. Standard Password Login ----------
   const handlePasswordLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError('');
     setSuccessMsg('');
-    setIsLoading(true);
 
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter your email and password.');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      const res = await login(email, password);
+      const res = await login(email.trim(), password);
       setIsLoading(false);
       if (res.success) {
         navigate(from, { replace: true });
       } else {
-        setError(res.error || 'Failed to authenticate');
+        setError(res.error || 'Authentication failed. Please verify credentials.');
       }
     } catch (err: any) {
       setIsLoading(false);
-      setError(err.message || 'Login failed. Please check credentials.');
+      setError(err.message || 'Login failed. Please check your credentials.');
     }
   };
 
-  // ---------- OTP Login ----------
-  const handleSendLoginOtp = () => {
+  // ---------- 2. Real OTP Login via Resend ----------
+  const handleSendLoginOtp = async () => {
     setError('');
     setSuccessMsg('');
+
     if (!email.trim()) {
-      setError('Please enter your registered email first.');
+      setError('Please enter your registered college email.');
       return;
     }
-    setOtpSent(true);
-    setOtpInput('');
-    setSuccessMsg(`Demo OTP sent to ${email}. Use code: ${DEMO_OTP}`);
+
+    setIsOtpSending(true);
+    try {
+      const res = await api.auth.requestLoginOtp(email.trim());
+      setIsOtpSending(false);
+      if (res.success) {
+        setOtpSent(true);
+        setOtpInput('');
+        setSuccessMsg(res.message || `A 6-digit verification code has been sent to ${email.trim()}.`);
+      } else {
+        setError(res.message || 'Unable to send OTP.');
+      }
+    } catch (err: any) {
+      setIsOtpSending(false);
+      setError(err.message || 'Failed to dispatch OTP. Please check your email and try again.');
+    }
   };
 
   const handleOtpLogin = async (e?: React.FormEvent) => {
@@ -96,49 +114,30 @@ export function LoginPage() {
     setError('');
     setSuccessMsg('');
 
-    if (otpInput.trim() !== DEMO_OTP) {
-      setError('Invalid OTP. For this demo use 123456.');
+    const cleanOtp = otpInput.trim();
+    if (!cleanOtp || cleanOtp.length !== 6) {
+      setError('Please enter the complete 6-digit verification code.');
       return;
     }
 
     setIsLoading(true);
     try {
-      // Try login with known demo passwords for the typed email
-      let res = await login(email, 'admin123');
-      if (!res.success) res = await login(email, 'teacher123');
-      if (!res.success) res = await login(email, 'student123');
-      if (!res.success) res = await login(email, password);
-
-      // Fallback so OTP flow always works in prototype
-      if (!res.success) {
-        res = await login('student@college.edu', 'student123');
-      }
-
+      const res = await loginWithOtp(email.trim(), cleanOtp);
       setIsLoading(false);
       if (res.success) {
         navigate(from, { replace: true });
       } else {
-        setError(res.error || 'OTP verified, but account login failed.');
+        setError(res.error || 'Invalid or expired OTP code.');
       }
     } catch (err: any) {
       setIsLoading(false);
-      setError(err.message || 'OTP login failed');
+      setError(err.message || 'OTP verification failed. Please try again.');
     }
   };
 
-  const selectDemoAccount = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError('');
-    setSuccessMsg('');
-    setOtpSent(false);
-    setOtpInput('');
-    setAuthMode('password');
-  };
-
-  // ---------- Forgot Password ----------
+  // ---------- 3. Forgot / Reset Password ----------
   const openForgotModal = () => {
-    setResetEmail(email);
+    setResetEmail(email.trim());
     setResetStep(1);
     setResetOtpInput('');
     setNewPassword('');
@@ -165,20 +164,19 @@ export function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsResetLoading(true);
     try {
       const res = await api.auth.requestForgotPasswordOtp(resetEmail.trim());
-      setIsLoading(false);
+      setIsResetLoading(false);
       if (res.success) {
-        setResetSuccess(res.message);
+        setResetSuccess(res.message || `Verification code sent to ${resetEmail.trim()}.`);
         setResetStep(2);
       } else {
         setResetError(res.message || 'Failed to send OTP.');
       }
-    } catch {
-      setIsLoading(false);
-      setResetSuccess(`Demo OTP sent to ${resetEmail}. Use code: ${DEMO_OTP}`);
-      setResetStep(2);
+    } catch (err: any) {
+      setIsResetLoading(false);
+      setResetError(err.message || 'Failed to send reset code. Please check your email.');
     }
   };
 
@@ -187,8 +185,8 @@ export function LoginPage() {
     setResetError('');
     setResetSuccess('');
 
-    if (!resetOtpInput.trim()) {
-      setResetError('Please enter the 6-digit OTP code.');
+    if (!resetOtpInput.trim() || resetOtpInput.trim().length !== 6) {
+      setResetError('Please enter the valid 6-digit OTP code.');
       return;
     }
 
@@ -202,7 +200,7 @@ export function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsResetLoading(true);
     try {
       const res = await api.auth.verifyResetOtp({
         email: resetEmail.trim(),
@@ -210,10 +208,8 @@ export function LoginPage() {
         newPassword,
       });
 
+      setIsResetLoading(false);
       if (res.success) {
-        // Also sync local
-        resetUserPassword(resetEmail.trim(), newPassword);
-        setIsLoading(false);
         setResetStep(3);
         setResetSuccess('Password has been successfully updated! You can now log in.');
         setEmail(resetEmail.trim());
@@ -222,34 +218,18 @@ export function LoginPage() {
         setTimeout(() => {
           closeForgotModal();
           setAuthMode('password');
-          setSuccessMsg('Password updated! Ready to log in with your new password.');
-        }, 1200);
-        return;
+          setSuccessMsg('Password updated successfully! Sign in with your new password.');
+        }, 1500);
+      } else {
+        setResetError(res.message || 'Password reset failed.');
       }
-    } catch (apiErr: any) {
-      // Check demo OTP fallback
-      if (resetOtpInput.trim() === DEMO_OTP) {
-        const res = resetUserPassword(resetEmail.trim(), newPassword);
-        setIsLoading(false);
-        if (res.success) {
-          setResetStep(3);
-          setResetSuccess('Password has been successfully updated! You can now log in.');
-          setEmail(resetEmail.trim());
-          setPassword(newPassword);
-          setTimeout(() => {
-            closeForgotModal();
-            setAuthMode('password');
-            setSuccessMsg('Password updated! Ready to log in with your new password.');
-          }, 1200);
-          return;
-        }
-      }
-      setIsLoading(false);
-      setResetError(apiErr.message || 'Invalid OTP. Please check your email and try again.');
+    } catch (err: any) {
+      setIsResetLoading(false);
+      setResetError(err.message || 'Invalid or expired OTP code.');
     }
   };
 
-  // ---------- Register Account with OTP ----------
+  // ---------- 4. Student Registration with Email OTP ----------
   const openRegisterModal = () => {
     setRegName('');
     setRegEmail('');
@@ -274,7 +254,7 @@ export function LoginPage() {
     setRegSuccess('');
 
     if (!regName.trim() || !regEmail.trim() || !regPassword.trim()) {
-      setRegError('Please fill in your name, email, and password.');
+      setRegError('Please provide your name, college email, and password.');
       return;
     }
 
@@ -288,15 +268,14 @@ export function LoginPage() {
       const res = await api.auth.requestRegisterOtp(regEmail.trim(), regName.trim());
       setIsRegLoading(false);
       if (res.success) {
-        setRegSuccess(res.message);
+        setRegSuccess(res.message || `Verification code sent to ${regEmail.trim()}.`);
         setRegisterStep(2);
       } else {
         setRegError(res.message || 'Could not send verification OTP.');
       }
-    } catch {
+    } catch (err: any) {
       setIsRegLoading(false);
-      setRegSuccess(`OTP sent to ${regEmail}. Use code: ${DEMO_OTP}`);
-      setRegisterStep(2);
+      setRegError(err.message || 'Could not send verification email. Please check the address.');
     }
   };
 
@@ -305,7 +284,7 @@ export function LoginPage() {
     setRegError('');
     setRegSuccess('');
 
-    if (!regOtp.trim()) {
+    if (!regOtp.trim() || regOtp.trim().length !== 6) {
       setRegError('Please enter the 6-digit OTP code.');
       return;
     }
@@ -328,89 +307,49 @@ export function LoginPage() {
         setTimeout(() => {
           closeRegisterModal();
           setAuthMode('password');
-          setSuccessMsg('Account registered! You can now log in.');
-        }, 1200);
+          setSuccessMsg('Account registered and verified! You can now sign in.');
+        }, 1500);
+      } else {
+        setRegError(res.message || 'Verification failed.');
       }
-    } catch (apiErr: any) {
-      if (regOtp.trim() === DEMO_OTP) {
-        setIsRegLoading(false);
-        setRegSuccess('Student account created and verified!');
-        setEmail(regEmail.trim());
-        setPassword(regPassword);
-        setTimeout(() => {
-          closeRegisterModal();
-          setAuthMode('password');
-          setSuccessMsg('Account registered! You can now log in.');
-        }, 1200);
-        return;
-      }
+    } catch (err: any) {
       setIsRegLoading(false);
-      setRegError(apiErr.message || 'Invalid verification OTP.');
+      setRegError(err.message || 'Invalid verification OTP.');
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col justify-center items-center bg-muted/30 px-4 py-8">
-      {/* Background decoration */}
+    <div className="min-h-screen w-full flex flex-col justify-center items-center bg-muted/30 px-4 py-8 relative">
+      {/* Dynamic ambient backdrop */}
       <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[30%] -left-[10%] w-[50vw] h-[50vw] rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -bottom-[30%] -right-[10%] w-[50vw] h-[50vw] rounded-full bg-blue-500/5 blur-3xl" />
+        <div className="absolute -top-[25%] -left-[10%] w-[55vw] h-[55vw] rounded-full bg-primary/10 blur-3xl opacity-70" />
+        <div className="absolute -bottom-[25%] -right-[10%] w-[50vw] h-[50vw] rounded-full bg-indigo-500/10 blur-3xl opacity-60" />
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 15 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
         className="w-full max-w-md"
       >
-        {/* Brand header */}
+        {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 mb-3">
-            <GraduationCap size={32} />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-primary/80 text-primary-foreground shadow-xl shadow-primary/20 mb-3 ring-4 ring-primary/10">
+            <GraduationCap size={36} />
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-foreground">Pinnacle College SIS</h1>
-          <p className="text-sm text-muted-foreground mt-1">Enterprise Academic Management Platform</p>
-        </div>
-
-        {/* Demo Selector Buttons */}
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Demo Persona</span>
-            <span className="text-[11px] font-medium text-primary">Click to prefill</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {DEMO_CREDENTIALS.map(c => {
-              const isSelected = email === c.email;
-              const icons = {
-                admin: <ShieldCheck size={16} className="text-indigo-500" />,
-                teacher: <UserCheck size={16} className="text-emerald-500" />,
-                student: <BookOpen size={16} className="text-amber-500" />,
-              };
-              return (
-                <button
-                  key={c.role}
-                  type="button"
-                  onClick={() => selectDemoAccount(c.email, c.password)}
-                  className={cn(
-                    "flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all duration-200 cursor-pointer",
-                    isSelected
-                      ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary"
-                      : "border-border/80 hover:bg-muted/50 hover:border-border"
-                  )}
-                >
-                  <div className="mb-1">{icons[c.role as keyof typeof icons]}</div>
-                  <span className="text-xs font-bold capitalize text-foreground">{c.role}</span>
-                  <span className="text-[10px] text-muted-foreground truncate w-full mt-0.5">{c.name.split(' ')[0]}</span>
-                </button>
-              );
-            })}
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+            Pinnacle University
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1.5 flex items-center justify-center gap-1.5">
+            <Sparkles size={14} className="text-primary" />
+            Enterprise Student Information System
+          </p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-card border border-border rounded-2xl p-6 sm:p-8 shadow-md">
-          {/* Auth mode tabs */}
-          <div className="flex p-1 mb-5 rounded-xl bg-muted/60 border border-border">
+        <div className="bg-card/90 backdrop-blur-md border border-border/80 rounded-2xl p-6 sm:p-8 shadow-xl">
+          {/* Auth Mode Tabs */}
+          <div className="flex p-1 mb-6 rounded-xl bg-muted/60 border border-border/60">
             <button
               type="button"
               onClick={() => {
@@ -419,9 +358,9 @@ export function LoginPage() {
                 setSuccessMsg('');
               }}
               className={cn(
-                'flex-1 py-2 text-xs font-bold rounded-lg transition-all',
+                'flex-1 py-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
                 authMode === 'password'
-                  ? 'bg-card text-foreground shadow-sm'
+                  ? 'bg-card text-foreground shadow-sm font-bold'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -437,42 +376,51 @@ export function LoginPage() {
                 setSuccessMsg('');
               }}
               className={cn(
-                'flex-1 py-2 text-xs font-bold rounded-lg transition-all',
+                'flex-1 py-2.5 text-xs font-semibold rounded-lg transition-all cursor-pointer',
                 authMode === 'otp'
-                  ? 'bg-card text-foreground shadow-sm'
+                  ? 'bg-card text-foreground shadow-sm font-bold'
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
               <span className="inline-flex items-center gap-1.5 justify-center">
-                <KeyRound size={13} /> OTP Login
+                <KeyRound size={13} /> Email OTP Login
               </span>
             </button>
           </div>
 
           {error && (
-            <div className="mb-5 flex items-start gap-2.5 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium">
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-5 flex items-start gap-2.5 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium"
+            >
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{error}</span>
-            </div>
+            </motion.div>
           )}
 
           {successMsg && (
-            <div className="mb-5 flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium">
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-5 flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium"
+            >
               <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
               <span>{successMsg}</span>
-            </div>
+            </motion.div>
           )}
 
-          {/* PASSWORD LOGIN */}
+          {/* PASSWORD LOGIN FORM */}
           {authMode === 'password' && (
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <Input
-                label="Email Address"
+                label="Registered College Email"
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="e.g. admin@college.edu"
+                placeholder="name@college.edu or personal email"
                 required
+                autoComplete="email"
               />
 
               <div>
@@ -494,19 +442,20 @@ export function LoginPage() {
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  autoComplete="current-password"
+                  className="flex h-10 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 />
               </div>
 
-              <Button type="submit" variant="primary" className="w-full mt-2" isLoading={isLoading}>
-                Sign In to Portal <ArrowRight size={16} className="ml-1" />
+              <Button type="submit" variant="primary" className="w-full mt-2 h-10 text-sm font-semibold" isLoading={isLoading}>
+                Sign In to Portal <ArrowRight size={16} className="ml-1.5" />
               </Button>
 
-              <div className="pt-2 text-center">
+              <div className="pt-3 text-center border-t border-border/60">
                 <button
                   type="button"
                   onClick={openRegisterModal}
-                  className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1.5"
+                  className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1.5 cursor-pointer"
                 >
                   <UserPlus size={14} /> New student? Register with email OTP
                 </button>
@@ -514,7 +463,7 @@ export function LoginPage() {
             </form>
           )}
 
-          {/* OTP LOGIN */}
+          {/* REAL OTP LOGIN FORM */}
           {authMode === 'otp' && (
             <form onSubmit={handleOtpLogin} className="space-y-4">
               <Input
@@ -526,27 +475,28 @@ export function LoginPage() {
                   setOtpSent(false);
                   setOtpInput('');
                 }}
-                placeholder="e.g. student@college.edu"
+                placeholder="Enter your registered account email"
                 required
+                autoComplete="email"
               />
 
               {!otpSent ? (
                 <Button
                   type="button"
                   variant="primary"
-                  className="w-full"
+                  className="w-full h-10 font-semibold"
+                  isLoading={isOtpSending}
                   onClick={handleSendLoginOtp}
                 >
-                  <KeyRound size={16} className="mr-1" /> Send OTP Code
+                  <KeyRound size={16} className="mr-1.5" /> Send 6-Digit Login Code
                 </Button>
               ) : (
                 <>
-                  <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-[11px] text-muted-foreground">
-                    <p className="font-semibold text-foreground mb-1">OTP sent (demo simulation)</p>
-                    <p>
-                      Use this code:{' '}
-                      <code className="text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">{DEMO_OTP}</code>
-                    </p>
+                  <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/20 text-xs text-muted-foreground flex items-start gap-2.5">
+                    <Mail size={16} className="text-primary shrink-0 mt-0.5" />
+                    <div className="leading-relaxed">
+                      Verification code has been sent to <strong className="text-foreground">{email}</strong>. Please check your inbox and enter the 6-digit code below.
+                    </div>
                   </div>
 
                   <div>
@@ -559,51 +509,42 @@ export function LoginPage() {
                       maxLength={6}
                       value={otpInput}
                       onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="123456"
+                      placeholder="••••••"
                       required
-                      className="flex h-11 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-center text-lg tracking-[0.4em] font-mono text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      autoFocus
+                      className="flex h-12 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-center text-xl tracking-[0.45em] font-mono text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     />
                   </div>
 
-                  <Button type="submit" variant="primary" className="w-full" isLoading={isLoading}>
-                    Verify OTP & Sign In <ArrowRight size={16} className="ml-1" />
+                  <Button type="submit" variant="primary" className="w-full h-10 font-semibold" isLoading={isLoading}>
+                    Verify OTP & Sign In <ArrowRight size={16} className="ml-1.5" />
                   </Button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOtpSent(false);
-                      setOtpInput('');
-                      setSuccessMsg('');
-                    }}
-                    className="w-full text-xs text-muted-foreground hover:text-primary"
-                  >
-                    Resend OTP / Change email
-                  </button>
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOtpSent(false);
+                        setOtpInput('');
+                        setSuccessMsg('');
+                      }}
+                      className="text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Change email
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isOtpSending}
+                      onClick={handleSendLoginOtp}
+                      className="text-primary font-semibold hover:underline cursor-pointer"
+                    >
+                      Resend code
+                    </button>
+                  </div>
                 </>
               )}
             </form>
           )}
-
-          {/* Student tip */}
-          <div className="mt-4 p-3 rounded-xl bg-primary/5 border border-primary/10 text-[11px] text-muted-foreground space-y-1">
-            <p className="font-semibold text-foreground flex items-center gap-1.5">
-              <KeyRound size={13} className="text-primary" /> Demo Auth Tip
-            </p>
-            <p>
-              OTP for login & reset is always{' '}
-              <code className="text-primary font-bold bg-primary/10 px-1 py-0.5 rounded">123456</code>.
-              New students default password:{' '}
-              <code className="text-primary font-bold bg-primary/10 px-1 py-0.5 rounded">student123</code>.
-            </p>
-          </div>
-
-          <div className="mt-5 pt-4 border-t border-border flex items-start gap-2 text-[11px] text-muted-foreground leading-relaxed">
-            <Info size={14} className="shrink-0 text-primary mt-0.5" />
-            <p>
-              <strong>Notice:</strong> Frontend prototype using <code>localStorage</code>. Real SMS/email OTP comes in backend class.
-            </p>
-          </div>
         </div>
       </motion.div>
 
@@ -611,8 +552,8 @@ export function LoginPage() {
       <Dialog
         isOpen={isForgotModalOpen}
         onClose={closeForgotModal}
-        title="Password Reset"
-        description="Verify your email with OTP, then set a new password."
+        title="Reset Password"
+        description="Verify your identity using an email OTP and create a new password."
         maxWidth="md"
       >
         <div className="space-y-4 text-left">
@@ -638,21 +579,21 @@ export function LoginPage() {
                 type="email"
                 value={resetEmail}
                 onChange={e => setResetEmail(e.target.value)}
-                placeholder="e.g. student@college.edu"
+                placeholder="e.g. name@college.edu"
                 required
               />
 
-              <div className="p-3 rounded-xl bg-muted/40 text-[11px] text-muted-foreground">
-                We’ll send a <strong>demo OTP</strong> to verify your identity. Code will be{' '}
-                <code className="text-primary font-bold">123456</code>.
+              <div className="p-3 rounded-xl bg-muted/50 text-xs text-muted-foreground flex items-center gap-2">
+                <Mail size={15} className="text-primary shrink-0" />
+                <span>A secure 6-digit verification code will be sent to your email.</span>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
                 <Button type="button" variant="outline" size="sm" onClick={closeForgotModal}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" size="sm">
-                  Send OTP Code
+                <Button type="submit" variant="primary" size="sm" isLoading={isResetLoading}>
+                  Send Verification Code
                 </Button>
               </div>
             </form>
@@ -661,9 +602,8 @@ export function LoginPage() {
           {/* Step 2: OTP + New Password */}
           {resetStep === 2 && (
             <form onSubmit={handlePasswordReset} className="space-y-4">
-              <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-[11px] text-muted-foreground">
-                Demo OTP for <strong>{resetEmail}</strong>:{' '}
-                <code className="text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded">{DEMO_OTP}</code>
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-xs text-muted-foreground">
+                Enter the code sent to <strong>{resetEmail}</strong>:
               </div>
 
               <div>
@@ -676,8 +616,9 @@ export function LoginPage() {
                   maxLength={6}
                   value={resetOtpInput}
                   onChange={e => setResetOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="123456"
+                  placeholder="••••••"
                   required
+                  autoFocus
                   className="flex h-11 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-center text-lg tracking-[0.4em] font-mono text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 />
               </div>
@@ -703,7 +644,7 @@ export function LoginPage() {
               <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
                 <button
                   type="button"
-                  className="text-xs text-muted-foreground hover:text-primary"
+                  className="text-xs text-muted-foreground hover:text-primary cursor-pointer"
                   onClick={() => {
                     setResetStep(1);
                     setResetError('');
@@ -716,7 +657,7 @@ export function LoginPage() {
                   <Button type="button" variant="outline" size="sm" onClick={closeForgotModal}>
                     Cancel
                   </Button>
-                  <Button type="submit" variant="primary" size="sm">
+                  <Button type="submit" variant="primary" size="sm" isLoading={isResetLoading}>
                     Verify & Update Password
                   </Button>
                 </div>
@@ -724,7 +665,7 @@ export function LoginPage() {
             </form>
           )}
 
-          {/* Step 3: Success flash (auto-closes) */}
+          {/* Step 3: Success */}
           {resetStep === 3 && (
             <div className="text-center py-6 space-y-3">
               <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
@@ -737,7 +678,7 @@ export function LoginPage() {
         </div>
       </Dialog>
 
-      {/* Student Registration with Resend OTP Dialog */}
+      {/* Student Registration Dialog */}
       <Dialog
         isOpen={isRegisterModalOpen}
         onClose={closeRegisterModal}
@@ -775,7 +716,7 @@ export function LoginPage() {
                 type="email"
                 value={regEmail}
                 onChange={e => setRegEmail(e.target.value)}
-                placeholder="e.g. john.doe@college.edu"
+                placeholder="e.g. name@college.edu"
                 required
               />
               <Input
@@ -787,10 +728,10 @@ export function LoginPage() {
                 required
               />
 
-              <div className="p-3 rounded-xl bg-muted/40 text-[11px] text-muted-foreground flex items-start gap-2">
-                <Mail size={15} className="shrink-0 text-primary mt-0.5" />
+              <div className="p-3 rounded-xl bg-muted/50 text-xs text-muted-foreground flex items-center gap-2">
+                <Mail size={15} className="shrink-0 text-primary" />
                 <span>
-                  We will send a 6-digit verification code to your email address using Resend.
+                  We will send a 6-digit verification code to your email.
                 </span>
               </div>
 
@@ -807,7 +748,7 @@ export function LoginPage() {
 
           {registerStep === 2 && (
             <form onSubmit={handleCompleteRegistration} className="space-y-4">
-              <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-[11px] text-muted-foreground">
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/15 text-xs text-muted-foreground">
                 Verification code sent to <strong>{regEmail}</strong>.
               </div>
 
@@ -821,8 +762,9 @@ export function LoginPage() {
                   maxLength={6}
                   value={regOtp}
                   onChange={e => setRegOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="123456"
+                  placeholder="••••••"
                   required
+                  autoFocus
                   className="flex h-11 w-full rounded-lg border border-input bg-card px-3 py-1.5 text-center text-lg tracking-[0.4em] font-mono text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 />
               </div>
@@ -830,7 +772,7 @@ export function LoginPage() {
               <div className="flex items-center justify-between gap-3 pt-3 border-t border-border">
                 <button
                   type="button"
-                  className="text-xs text-muted-foreground hover:text-primary"
+                  className="text-xs text-muted-foreground hover:text-primary cursor-pointer"
                   onClick={() => setRegisterStep(1)}
                 >
                   ← Edit details

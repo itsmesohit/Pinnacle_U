@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithOtp: (email: string, otp: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   resetPassword: (email: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   hasRole: (role: UserRole | UserRole[]) => boolean;
@@ -119,6 +120,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { success: false, error: 'Account not found. Please verify your email or register a new student account.' };
   }, []);
 
+  const loginWithOtp = useCallback(async (email: string, otp: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
+    try {
+      const res = await api.auth.verifyLoginOtp({ email: cleanEmail, otp: cleanOtp });
+      if (res.success && res.user) {
+        setAuthToken(res.token);
+        const loggedUser: User = {
+          id: res.user.id,
+          email: res.user.email,
+          name: res.user.name,
+          role: res.user.role,
+          avatar: res.user.avatar,
+          linkedEntityId: res.user.linkedEntityId,
+        };
+        setUser(loggedUser);
+        persistUser(loggedUser);
+        return { success: true };
+      }
+      return { success: false, error: 'OTP verification failed' };
+    } catch (apiErr: any) {
+      return { success: false, error: apiErr.message || 'OTP verification failed' };
+    }
+  }, []);
+
   const resetPassword = useCallback(async (email: string, newPassword: string) => {
     // Sync to local data service
     return resetUserPassword(email, newPassword);
@@ -146,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isAuthenticated: !!user,
         login,
+        loginWithOtp,
         logout,
         resetPassword,
         hasRole,
