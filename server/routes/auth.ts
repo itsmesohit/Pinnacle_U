@@ -29,13 +29,16 @@ authRouter.post('/register-otp', async (req, res) => {
     }
 
     const result = await createAndSendOtp(cleanEmail, 'REGISTER', name);
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error || 'Failed to send verification email. Please verify the email address.',
+      });
+    }
+
     return res.json({
       success: true,
-      message: result.simulated
-        ? `[SIMULATED] OTP generated. Check console or use code: ${result.otpPreview}`
-        : 'Verification code sent to your email address.',
-      simulated: result.simulated,
-      otpPreview: result.otpPreview,
+      message: `A 6-digit verification code has been sent to ${cleanEmail}. Please check your inbox.`,
     });
   } catch (err: any) {
     console.error('Error in register-otp:', err);
@@ -141,14 +144,16 @@ authRouter.post('/forgot-password-otp', async (req, res) => {
     }
 
     const result = await createAndSendOtp(cleanEmail, 'FORGOT_PASSWORD', userName);
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error || 'Failed to send password reset code.',
+      });
+    }
 
     return res.json({
       success: true,
-      message: result.simulated
-        ? `[SIMULATED] Reset code generated. Check server console or use: ${result.otpPreview}`
-        : 'Password reset OTP has been sent to your email.',
-      simulated: result.simulated,
-      otpPreview: result.otpPreview,
+      message: `Password reset OTP has been sent to ${cleanEmail}. Please check your inbox.`,
     });
   } catch (err: any) {
     console.error('Error in forgot-password-otp:', err);

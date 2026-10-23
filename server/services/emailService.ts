@@ -1,7 +1,7 @@
 import { Resend } from 'resend';
 
 const resendApiKey = process.env.RESEND_API_KEY;
-const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'Pinnacle University <onboarding@resend.dev>';
+const resendFromEmail = process.env.RESEND_FROM_EMAIL || 'Pinnacle University <auth@codingspark.in>';
 
 // Initialize Resend if valid key provided
 const resend = resendApiKey && resendApiKey.startsWith('re_') && !resendApiKey.includes('placeholder')
